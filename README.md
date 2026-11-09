@@ -94,7 +94,11 @@ npm run dev
 `/` is the mentor. `/review` is the reviewer view.
 
 Without `ELASTIC_CLOUD_ID` the app runs on the in-memory corpus and says so
-in the header. Nothing else changes.
+in the header. Nothing else changes, and this is tested rather than assumed:
+started with the Elastic credentials removed from both the environment and
+`.env.local`, the mentor still reports 111 Backstage talks with real links,
+the reviewer still returns neighbours and verbatim evidence, and both pages
+show `retrieval: in-memory BM25`.
 
 Environment: `LLM_BASE_URL`, `LLM_API_KEY`, `ELASTIC_CLOUD_ID`,
 `ELASTIC_API_KEY`. All server-side. None of them reach the browser.
