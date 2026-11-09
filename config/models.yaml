@@ -1,7 +1,7 @@
 # Model names exactly as the endpoint serves them.
 aliases:
-  reasoning: ""
-  fast: ""
+  reasoning: "qwen3.8-27b"
+  fast: "qwen3.8-27b-nothink"
 
 models:
   mentor:  { alias: fast,      temperature: 0.4, stream: true, max_tool_calls_per_turn: 4 }
