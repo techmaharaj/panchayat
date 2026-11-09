@@ -11,8 +11,30 @@ retrieval:
   k: 10
   rrf_rank_constant: 60
 
-weights:
-  novelty: 0.35
-  overlap: 0.25
-  specificity: 0.25
-  track_fit: 0.15
+# The five axes of the Panch Score. Panch is five: five axes, five elders.
+# A chair retunes these here, never in code.
+axes:
+  content:      { label: "Content",            weight: 0.30 }
+  originality:  { label: "Originality",        weight: 0.25 }
+  relevance:    { label: "Relevance",          weight: 0.20 }
+  speaker:      { label: "Speaker",            weight: 0.15 }
+  not_a_pitch:  { label: "Not a Product Pitch", weight: 0.10 }
+
+tracks:
+  - Platform Engineering
+  - Observability
+  - AI + ML
+  - Security
+  - Networking
+  - Operations + Performance
+  - Application Development
+  - Data Processing + Storage
+  - Cloud Native Novice
+  - SDLC
+
+formats:
+  - 35 min session
+  - Lightning talk
+  - Tutorial
+  - Panel
+  - Workshop

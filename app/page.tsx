@@ -1,222 +1,87 @@
 "use client";
 
-import { useRef, useState } from "react";
-import type { Neighbour } from "@/lib/retrieval/types";
-import { TalkCards } from "./TalkCards";
+import Link from "next/link";
+import { MentorPanel } from "./MentorPanel";
 
-type Item =
-  | { kind: "user"; text: string }
-  | { kind: "assistant"; text: string }
-  | { kind: "tool"; label: string; summary: string | null; citations: Neighbour[] }
-  | { kind: "error"; text: string };
-
-const STARTERS = [
+const PROMPTS = [
   "I want to talk about Backstage",
   "Write my abstract for me",
   "Is observability too crowded for a first-time speaker?",
+  "I migrated 40 clusters off Istio. Is that a talk?",
 ];
 
 export default function MentorPage() {
-  const [items, setItems] = useState<Item[]>([]);
-  const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [backend, setBackend] = useState<string | null>(null);
-  const [degraded, setDegraded] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
-
-  function scroll() {
-    requestAnimationFrame(() => endRef.current?.scrollIntoView({ behavior: "smooth" }));
-  }
-
-  async function send(text: string) {
-    const clean = text.trim();
-    if (!clean || busy) return;
-
-    const history = [
-      ...items
-        .filter((i) => i.kind === "user" || i.kind === "assistant")
-        .map((i) => ({
-          role: i.kind as "user" | "assistant",
-          content: (i as { text: string }).text,
-        })),
-      { role: "user" as const, content: clean },
-    ];
-
-    setItems((prev) => [...prev, { kind: "user", text: clean }]);
-    setInput("");
-    setBusy(true);
-    scroll();
-
-    try {
-      const res = await fetch("/api/mentor", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messages: history }),
-      });
-      if (!res.ok || !res.body) throw new Error(`the mentor route returned ${res.status}`);
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          let ev: Record<string, unknown>;
-          try {
-            ev = JSON.parse(line);
-          } catch {
-            continue;
-          }
-
-          if (ev.type === "backend") {
-            setBackend(String(ev.name));
-          } else if (ev.type === "token") {
-            const t = String(ev.text);
-            setItems((prev) => {
-              const last = prev[prev.length - 1];
-              if (last?.kind === "assistant") {
-                return [...prev.slice(0, -1), { kind: "assistant", text: last.text + t }];
-              }
-              return [...prev, { kind: "assistant", text: t }];
-            });
-          } else if (ev.type === "tool_start") {
-            setItems((prev) => [
-              ...prev,
-              { kind: "tool", label: String(ev.label), summary: null, citations: [] },
-            ]);
-          } else if (ev.type === "tool_end") {
-            if (ev.degraded) setDegraded(true);
-            if (ev.backend) setBackend(String(ev.backend));
-            setItems((prev) => {
-              const idx = [...prev].reverse().findIndex(
-                (i) => i.kind === "tool" && i.summary === null,
-              );
-              if (idx === -1) return prev;
-              const at = prev.length - 1 - idx;
-              const next = [...prev];
-              next[at] = {
-                kind: "tool",
-                label: (prev[at] as { label: string }).label,
-                summary: String(ev.summary),
-                citations: (ev.citations as Neighbour[]) ?? [],
-              };
-              return next;
-            });
-          } else if (ev.type === "error") {
-            setItems((prev) => [...prev, { kind: "error", text: String(ev.message) }]);
-          }
-          scroll();
-        }
-      }
-    } catch (err) {
-      setItems((prev) => [...prev, { kind: "error", text: (err as Error).message }]);
-    } finally {
-      setBusy(false);
-      scroll();
-    }
-  }
-
   return (
-    <div className="shell">
-      <header className="top">
-        <h1>Panchayat</h1>
-        <span className="tag">CFP mentor, grounded in 3,436 real KubeCon talks</span>
-        <nav>
-          <a href="/review">Reviewer view</a>
-        </nav>
-      </header>
-
-      <div className="row" style={{ marginBottom: 6 }}>
-        <span className={`backend${degraded ? " degraded" : ""}`}>
-          retrieval: {backend ?? "not called yet"}
-        </span>
-        <span className="note">Every count and every talk below comes from a tool call.</span>
+    <>
+      <div className="topbar">
+        <h1>Mentor</h1>
+        <span className="sep">/</span>
+        <span className="muted">for speakers who have nobody to ask</span>
+        <div className="right">
+          <Link href="/submit">
+            <button className="secondary small">Go to the form →</button>
+          </Link>
+        </div>
       </div>
 
-      {!items.length && (
-        <>
-          <p className="note" style={{ marginTop: 18 }}>
-            You are a first-time speaker with nobody to ask. Start anywhere.
-          </p>
-          <div className="starters">
-            {STARTERS.map((s) => (
-              <button key={s} onClick={() => send(s)} disabled={busy}>
-                {s}
-              </button>
-            ))}
+      <div className="page">
+        <div className="tiles" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
+          <div className="tile accent">
+            <div className="k">Corpus</div>
+            <div className="v">3,436</div>
+            <div className="c">real talks, 2023 to 2026</div>
           </div>
-        </>
-      )}
-
-      {items.map((item, i) => {
-        if (item.kind === "user") {
-          return (
-            <div className="msg user" key={i}>
-              <div className="who">you</div>
-              <div className="body">{item.text}</div>
-            </div>
-          );
-        }
-        if (item.kind === "assistant") {
-          return (
-            <div className="msg" key={i}>
-              <div className="who">mentor</div>
-              <div className="body">{item.text}</div>
-            </div>
-          );
-        }
-        if (item.kind === "tool") {
-          return (
-            <div key={i}>
-              <div className={`tool${item.summary === null ? " running" : ""}`}>
-                <span className="dot" />
-                <span>{item.summary ?? `${item.label}...`}</span>
-              </div>
-              <TalkCards talks={item.citations} />
-            </div>
-          );
-        }
-        return (
-          <div className="err" key={i}>
-            {item.text}
+          <div className="tile">
+            <div className="k">Grounding</div>
+            <div className="v sm">Every claim</div>
+            <div className="c">comes from a search, never from memory</div>
           </div>
-        );
-      })}
-
-      <div ref={endRef} />
-
-      <form
-        className="composer"
-        onSubmit={(e) => {
-          e.preventDefault();
-          send(input);
-        }}
-      >
-        <div className="inner">
-          <textarea
-            rows={1}
-            value={input}
-            placeholder="What do you want to talk about?"
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send(input);
-              }
-            }}
-          />
-          <button type="submit" disabled={busy || !input.trim()}>
-            {busy ? "..." : "Send"}
-          </button>
+          <div className="tile">
+            <div className="k">Citations</div>
+            <div className="v sm">Real links</div>
+            <div className="c">each card opens the actual schedule page</div>
+          </div>
+          <div className="tile">
+            <div className="k">It will not</div>
+            <div className="v sm">Write for you</div>
+            <div className="c">ask it to and watch what happens</div>
+          </div>
         </div>
-      </form>
-    </div>
+
+        <div className="withside">
+          <MentorPanel
+            heading="Mentor"
+            intro="You have an idea and nobody to ask whether it is worth submitting. Start anywhere. The mentor searches 3,436 prior talks before it says anything about the field, and it will ask what you actually did before it offers you an opinion."
+            prompts={PROMPTS}
+            maxHeight="58vh"
+          />
+
+          <div className="side stack">
+            <div className="card">
+              <div className="hd">
+                <h2>How this works</h2>
+              </div>
+              <div className="bd stack" style={{ gap: 12 }}>
+                <p className="muted" style={{ margin: 0 }}>
+                  Two tools, nothing else. <b>Count a topic</b> across the corpus, and{" "}
+                  <b>find prior talks</b> like an idea. You see each call as it runs.
+                </p>
+                <p className="muted" style={{ margin: 0 }}>
+                  It will not write or rewrite your abstract, not even a sentence of it, and
+                  not when the deadline is in an hour. An abstract in its words stops being
+                  yours, and a reviewer can tell.
+                </p>
+                <p className="muted" style={{ margin: 0 }}>
+                  When you are ready, the form is next door and the mentor comes with you.
+                </p>
+                <Link href="/submit">
+                  <button style={{ width: "100%" }}>Start a submission</button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }

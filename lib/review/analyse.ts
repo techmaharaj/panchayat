@@ -2,16 +2,29 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { chat } from "@/lib/llm/client";
 import type { Neighbour } from "@/lib/retrieval";
+import { buildAxes, type AxisScore } from "./axes";
+import { overlapScores } from "./overlap";
 
 export interface Analysis {
   differs_paragraph: string;
-  specificity: "high" | "medium" | "low";
+  axes: AxisScore[];
   specificity_evidence: string[];
   sales_evidence: string[];
   suggested_track: string;
+  nearest_title: string | null;
   /** Set when the model call or its JSON failed. The page still renders. */
   degraded: boolean;
   dropped_quotes: number;
+}
+
+export interface SubmissionInput {
+  title: string;
+  abstract: string;
+  track: string;
+  format?: string;
+  speaker_bio?: string;
+  speaker_name?: string;
+  speaker_employer?: string;
 }
 
 let systemPrompt: string | null = null;
@@ -52,24 +65,51 @@ function extractJson(text: string): unknown {
   return JSON.parse(body.slice(start, end + 1));
 }
 
-const FALLBACK: Analysis = {
-  differs_paragraph:
-    "The language analysis is unavailable for this submission. The similar prior talks and the retrieval scores below are unaffected and are the harder evidence anyway.",
-  specificity: "medium",
-  specificity_evidence: [],
-  sales_evidence: [],
-  suggested_track: "",
-  degraded: true,
-  dropped_quotes: 0,
-};
+function num(v: unknown, fallback: number): number {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : fallback;
+}
 
-export async function analyse(abstract: string, neighbours: Neighbour[]): Promise<Analysis> {
+export async function analyse(
+  sub: SubmissionInput,
+  neighbours: Neighbour[],
+): Promise<Analysis> {
+  const abstract = sub.abstract;
+  const overlap = overlapScores(abstract, neighbours);
+
   const priors = neighbours
     .slice(0, 6)
-    .map((n, i) => `${i + 1}. "${n.title}" (${n.conference} ${n.edition} ${n.year})`)
+    .map((n, i) => `${i + 1}. "${n.title}" (${n.conference} ${n.edition} ${n.year}${n.track ? `, ${n.track}` : ""})`)
     .join("\n");
 
-  const user = `ABSTRACT UNDER REVIEW:\n"""\n${abstract}\n"""\n\nMOST SIMILAR PRIOR ACCEPTED TALKS:\n${priors || "none found"}`;
+  const user = [
+    `TRACK THE SPEAKER CHOSE: ${sub.track || "none given"}`,
+    sub.format ? `FORMAT: ${sub.format}` : "",
+    `TITLE: ${sub.title}`,
+    `\nABSTRACT:\n"""\n${abstract}\n"""`,
+    sub.speaker_bio ? `\nSPEAKER BIO:\n"""\n${sub.speaker_bio}\n"""` : "",
+    `\nMOST SIMILAR PRIOR ACCEPTED TALKS:\n${priors || "none found"}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  // Originality is not the model's to judge. It comes from the corpus.
+  const originality = overlap.novelty;
+
+  const fallback = (): Analysis => ({
+    differs_paragraph:
+      "The language pass is unavailable for this submission. Originality below is computed from the corpus and is unaffected: it is the harder evidence anyway.",
+    axes: buildAxes(
+      { content: 50, originality, relevance: 50, speaker: 50, not_a_pitch: 50 },
+      { originality: overlap.nearest_title ? `Measured against "${overlap.nearest_title}".` : "" },
+    ),
+    specificity_evidence: [],
+    sales_evidence: [],
+    suggested_track: "",
+    nearest_title: overlap.nearest_title,
+    degraded: true,
+    dropped_quotes: 0,
+  });
 
   let raw: string;
   try {
@@ -79,29 +119,47 @@ export async function analyse(abstract: string, neighbours: Neighbour[]): Promis
     ]);
     raw = ("choices" in res ? res.choices[0]?.message?.content : "") ?? "";
   } catch {
-    return FALLBACK;
+    return fallback();
   }
 
   let parsed: Record<string, unknown>;
   try {
     parsed = extractJson(raw) as Record<string, unknown>;
   } catch {
-    return FALLBACK;
+    return fallback();
   }
 
   const spec = keepVerbatim(parsed.specificity_evidence, abstract);
   const sales = keepVerbatim(parsed.sales_evidence, abstract);
-  const level = String(parsed.specificity ?? "").toLowerCase();
+
+  const values = {
+    content: num(parsed.content_score, 50),
+    originality,
+    relevance: num(parsed.relevance_score, 50),
+    speaker: num(parsed.speaker_score, 50),
+    not_a_pitch: num(parsed.pitch_score, 50),
+  };
+
+  const notes = {
+    content: String(parsed.content_note ?? ""),
+    originality: overlap.nearest_title
+      ? `${overlap.overlap} percent of this abstract's distinctive vocabulary already appears in "${overlap.nearest_title}".`
+      : "Nothing in the corpus is close to this.",
+    relevance: String(parsed.relevance_note ?? ""),
+    speaker: String(parsed.speaker_note ?? ""),
+    not_a_pitch: String(parsed.pitch_note ?? ""),
+  };
 
   return {
     differs_paragraph:
       typeof parsed.differs_paragraph === "string" && parsed.differs_paragraph.trim()
         ? parsed.differs_paragraph.trim()
-        : FALLBACK.differs_paragraph,
-    specificity: level === "high" || level === "low" ? level : "medium",
+        : fallback().differs_paragraph,
+    axes: buildAxes(values, notes),
     specificity_evidence: spec.kept,
     sales_evidence: sales.kept,
     suggested_track: typeof parsed.suggested_track === "string" ? parsed.suggested_track : "",
+    nearest_title: overlap.nearest_title,
     degraded: false,
     dropped_quotes: spec.dropped + sales.dropped,
   };

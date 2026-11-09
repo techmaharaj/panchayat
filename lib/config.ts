@@ -9,11 +9,26 @@ export interface ModelSpec {
   max_tool_calls_per_turn?: number;
 }
 
+export interface AxisConfig {
+  label: string;
+  weight: number;
+}
+
 export interface AppConfig {
   aliases: Record<string, string>;
   models: Record<string, ModelSpec>;
   retrieval: { k: number; rrf_rank_constant: number };
-  weights: Record<string, number>;
+  axes: Record<string, AxisConfig>;
+  tracks: string[];
+  formats: string[];
+}
+
+export type AxisKey = keyof AppConfig["axes"];
+
+/** The five axes in display order, straight from config. */
+export function axes(): { key: string; label: string; weight: number }[] {
+  const a = config().axes;
+  return Object.entries(a).map(([key, v]) => ({ key, label: v.label, weight: v.weight }));
 }
 
 let cached: AppConfig | null = null;

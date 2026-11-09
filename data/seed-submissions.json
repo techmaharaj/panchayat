@@ -1,0 +1,37 @@
+[
+  {
+    "title": "Backstage for 500 Engineers in a Regulated Bank",
+    "track": "Platform Engineering",
+    "format": "35 min session",
+    "speaker": {"name": "Rhea Nandakumar", "employer": "Vantage Bank", "email": "rhea@example.com", "bio": "Platform engineer at Vantage Bank, where she owns the developer portal for 14 business units. Previously ran the CI estate at a payments startup. Has never spoken at a conference."},
+    "abstract": "We rolled out Backstage 1.28 to 500 engineers across 14 regulated business units, and the hard part was never the catalog. Our first attempt failed: we modelled ownership from our LDAP groups, which were six years stale, and 40 percent of components resolved to teams that no longer existed. We rebuilt ownership from merge activity in GitLab instead, and catalog accuracy went from 61 percent to 94 percent in nine weeks. Onboarding a new service went from 3 weeks of tickets to 2 days, measured across 112 services. I will show the ownership resolver we wrote, the two audit controls our regulator made us add to the scaffolder, and the plugin we deleted after nobody opened it in four months. If you are running Backstage somewhere with auditors, the catalog is an access control problem wearing a developer portal costume."
+  },
+  {
+    "title": "Unlocking Developer Velocity With Platform Engineering",
+    "track": "Platform Engineering",
+    "format": "35 min session",
+    "speaker": {"name": "A. Visionary", "employer": "Synergex Cloud", "email": "av@example.com", "bio": "Thought leader in cloud native transformation, helping enterprises unlock value at scale."},
+    "abstract": "In today's fast-paced cloud native landscape, organizations are under unprecedented pressure to deliver faster while maintaining reliability at scale. Platform engineering has emerged as the key to unlocking developer velocity and driving business outcomes. In this session, we will explore how leading organizations are leveraging internal developer platforms to empower their teams, reduce cognitive load, and accelerate time to market. We will discuss best practices, common pitfalls, and lessons learned from real-world transformations across the industry. Attendees will walk away with actionable insights and a practical roadmap for building a world-class platform that delights developers and delivers measurable business value. Join us to learn how our award-winning platform solution can help you on your cloud native journey."
+  },
+  {
+    "title": "We Deleted Our Service Mesh and Latency Dropped 40ms",
+    "track": "Networking",
+    "format": "35 min session",
+    "speaker": {"name": "Tomas Lindqvist", "employer": "Kvitt", "email": "tomas@example.com", "bio": "Infrastructure engineer at Kvitt, a Nordic payments company running 40 Kubernetes clusters. Spent two years running Istio in production and one year taking it out."},
+    "abstract": "We ran Istio 1.20 across 40 clusters for two years and then removed it, and p99 latency on our payments path dropped from 180ms to 140ms. This is not a talk about Istio being bad. It is a talk about what we were actually buying and what we only thought we were buying. We needed mTLS between 9 services, not 300, and we needed retries on exactly two call paths. We were paying for a sidecar on 1,400 pods to get that. I will show the three incidents that pushed the decision, including the one where the control plane was healthy and every proxy disagreed about it, the 6 weeks of migration to Cilium plus application-level retries, and the 2 things we lost that we genuinely miss. If you are about to adopt a mesh, I want you to be able to write down what you are buying first."
+  },
+  {
+    "title": "Observability Costs More Than the Thing It Watches",
+    "track": "Observability",
+    "format": "Lightning talk",
+    "speaker": {"name": "Priya Raghunathan", "employer": "Mesa Logistics", "email": "priya@example.com", "bio": "SRE at Mesa Logistics. Owns the observability budget, which is how she ended up giving this talk."},
+    "abstract": "Our observability bill reached 31 percent of our total infrastructure spend before anyone noticed, because it arrived as four separate invoices. In 10 minutes I will show the audit we ran across 2,100 services: which 40 metrics accounted for 70 percent of our cardinality, the 14 dashboards that nobody had opened in 6 months, and the single debug log line in a hot path that cost us 9,000 dollars a month on its own. We cut spend 54 percent in one quarter and kept every alert that had ever fired truthfully. The method is boring and it is transferable, and I will give you the queries."
+  },
+  {
+    "title": "AI Agents Will Transform Your Cloud Native Operations",
+    "track": "AI + ML",
+    "format": "35 min session",
+    "speaker": {"name": "Marcus Chen", "employer": "Nebulon AI", "email": "marcus@example.com", "bio": "VP of Developer Relations at Nebulon AI, evangelizing the future of autonomous infrastructure."},
+    "abstract": "Artificial intelligence is revolutionizing the way we build and operate cloud native systems. As organizations grapple with ever-increasing complexity, AI agents offer a compelling path forward: autonomous systems that can detect, diagnose, and remediate issues faster than any human operator. In this forward-looking session, we will examine the emerging landscape of agentic operations, explore key use cases across the enterprise, and share our vision for the self-healing platform of tomorrow. We will cover the critical capabilities every organization should look for, the pitfalls to avoid on your AI journey, and how our industry-leading platform is helping customers achieve unprecedented operational efficiency. Walk away inspired and ready to embrace the agentic future."
+  }
+]

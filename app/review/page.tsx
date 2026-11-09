@@ -1,290 +1,235 @@
 "use client";
 
-import { useState } from "react";
-import type { Neighbour } from "@/lib/retrieval/types";
-import { TalkCards } from "../TalkCards";
-import { SAMPLES, type Sample } from "./samples";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
-interface Analysis {
-  differs_paragraph: string;
-  specificity: "high" | "medium" | "low";
-  specificity_evidence: string[];
-  sales_evidence: string[];
-  suggested_track: string;
-  degraded: boolean;
-  dropped_quotes: number;
+interface Row {
+  id: string;
+  title: string;
+  track: string;
+  format: string;
+  speaker: { name: string; employer: string };
+  panch_score: number | null;
+  analysed: boolean;
+  axes: { key: string; label: string; ai: number }[];
+  submitted_at: string;
+  reviewed: boolean;
+  verdict: string | null;
 }
 
-interface Result {
-  backend: string;
-  retrieval_degraded: boolean;
-  neighbours: Neighbour[];
-  scores: {
-    overlap: number;
-    novelty: number;
-    nearest_title: string | null;
-    mean_top3: number;
-    composite: number;
-  };
-  weights: Record<string, number>;
-  analysis: Analysis;
+function band(n: number): string {
+  if (n >= 65) return " hi";
+  if (n < 40) return " lo";
+  return "";
 }
 
-/** Wrap every validated quote where it actually appears in the abstract. */
-function Highlighted({ text, quotes }: { text: string; quotes: string[] }) {
-  if (!quotes.length) return <>{text}</>;
-  const spans: { start: number; end: number }[] = [];
-  for (const q of quotes) {
-    let from = 0;
-    for (;;) {
-      const at = text.indexOf(q, from);
-      if (at === -1) break;
-      spans.push({ start: at, end: at + q.length });
-      from = at + q.length;
-    }
-  }
-  spans.sort((a, b) => a.start - b.start);
-  const merged: { start: number; end: number }[] = [];
-  for (const s of spans) {
-    const last = merged[merged.length - 1];
-    if (last && s.start <= last.end) last.end = Math.max(last.end, s.end);
-    else merged.push({ ...s });
-  }
-  const out: React.ReactNode[] = [];
-  let cursor = 0;
-  merged.forEach((s, i) => {
-    if (s.start > cursor) out.push(text.slice(cursor, s.start));
-    out.push(<mark key={i}>{text.slice(s.start, s.end)}</mark>);
-    cursor = s.end;
-  });
-  if (cursor < text.length) out.push(text.slice(cursor));
-  return <>{out}</>;
-}
-
-export default function ReviewPage() {
-  const [sample, setSample] = useState<Sample | null>(null);
-  const [title, setTitle] = useState("");
-  const [abstract, setAbstract] = useState("");
+export default function QueuePage() {
+  const [rows, setRows] = useState<Row[] | null>(null);
+  const [backend, setBackend] = useState<string>("");
+  const [track, setTrack] = useState("All tracks");
+  const [show, setShow] = useState<"all" | "todo" | "done">("all");
   const [anonymous, setAnonymous] = useState(true);
-  const [result, setResult] = useState<Result | null>(null);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [decision, setDecision] = useState<string | null>(null);
 
-  function pick(s: Sample) {
-    setSample(s);
-    setTitle(s.title);
-    setAbstract(s.abstract);
-    setResult(null);
-    setDecision(null);
-    setError(null);
-  }
+  useEffect(() => {
+    fetch("/api/submissions")
+      .then((r) => r.json())
+      .then((d) => {
+        setRows(d.items ?? []);
+        setBackend(d.backend ?? "");
+      })
+      .catch((e) => setError((e as Error).message));
+  }, []);
 
-  async function run() {
-    setBusy(true);
-    setError(null);
-    setResult(null);
-    setDecision(null);
-    try {
-      const res = await fetch("/api/review", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title, abstract }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `the review route returned ${res.status}`);
-      setResult(data as Result);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const tracks = useMemo(() => {
+    const t = new Set((rows ?? []).map((r) => r.track).filter(Boolean));
+    return ["All tracks", ...[...t].sort()];
+  }, [rows]);
 
-  const a = result?.analysis;
-  // A first-time speaker has no prior talk in the corpus. Nobody matches
-  // the neighbours by name here, so we read it off the sample's own flag.
-  const firstTime =
-    sample && !result?.neighbours.some((n) => n.speakers?.some((sp) => sp.name === sample.speaker.name));
+  const filtered = useMemo(() => {
+    let out = rows ?? [];
+    if (track !== "All tracks") out = out.filter((r) => r.track === track);
+    if (show === "todo") out = out.filter((r) => !r.reviewed);
+    if (show === "done") out = out.filter((r) => r.reviewed);
+    return out;
+  }, [rows, track, show]);
+
+  const total = rows?.length ?? 0;
+  const reviewed = (rows ?? []).filter((r) => r.reviewed).length;
+  const scored = (rows ?? []).filter((r) => r.panch_score !== null);
+  const mean = scored.length
+    ? Math.round(scored.reduce((a, r) => a + (r.panch_score ?? 0), 0) / scored.length)
+    : 0;
+  const pct = total ? Math.round((100 * reviewed) / total) : 0;
 
   return (
-    <div className="shell">
-      <header className="top">
-        <h1>Panchayat</h1>
-        <span className="tag">Reviewer view</span>
-        <nav>
-          <a href="/">Mentor</a>
-        </nav>
-      </header>
-
-      <div className="row" style={{ marginBottom: 14 }}>
-        <span className={`backend${result?.retrieval_degraded ? " degraded" : ""}`}>
-          retrieval: {result?.backend ?? "not called yet"}
-        </span>
-        <label className="note row" style={{ gap: 6 }}>
-          <input
-            type="checkbox"
-            checked={anonymous}
-            onChange={(e) => setAnonymous(e.target.checked)}
-          />
-          Anonymise the speaker
-        </label>
-      </div>
-
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <h2>Submission</h2>
-        <div className="starters" style={{ marginTop: 0, marginBottom: 12 }}>
-          {SAMPLES.map((s) => (
-            <button key={s.id} onClick={() => pick(s)}>
-              {s.label} sample
-            </button>
-          ))}
-        </div>
-        <input
-          className="text"
-          style={{ width: "100%", marginBottom: 8 }}
-          placeholder="Title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <textarea
-          rows={7}
-          style={{ width: "100%" }}
-          placeholder="Paste an abstract"
-          value={abstract}
-          onChange={(e) => setAbstract(e.target.value)}
-        />
-        {sample && (
-          <p className="note" style={{ marginBottom: 0 }}>
-            Speaker:{" "}
-            {anonymous ? (
-              <em>hidden while reviewing</em>
-            ) : (
-              <>
-                {sample.speaker.name}, {sample.speaker.employer}
-              </>
-            )}
-            {firstTime && " · no prior talk in the corpus"}
-          </p>
-        )}
-        <div className="row" style={{ marginTop: 12 }}>
-          <button onClick={run} disabled={busy || abstract.trim().length < 60}>
-            {busy ? "Reading..." : "Read this submission"}
-          </button>
-          <span className="note">One retrieval query, one model call.</span>
+    <>
+      <div className="topbar">
+        <h1>Review queue</h1>
+        <span className="sep">/</span>
+        <span className="muted">KubeCon Europe 2027</span>
+        <div className="right">
+          {backend && (
+            <span className={`chip${backend.startsWith("in-memory") ? " degraded" : ""}`}>
+              <span className="led" />
+              {backend}
+            </span>
+          )}
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={anonymous}
+              onChange={(e) => setAnonymous(e.target.checked)}
+            />
+            Anonymous review
+          </label>
         </div>
       </div>
 
-      {error && <div className="err">{error}</div>}
-
-      {result && a && (
-        <div className="grid2">
-          <div className="panel">
-            <h2>How it differs</h2>
-            <p style={{ marginTop: 0 }}>{a.differs_paragraph}</p>
-            {a.suggested_track && (
-              <p className="note" style={{ marginBottom: 0 }}>
-                Looks closest to: {a.suggested_track}
-              </p>
-            )}
-            {a.degraded && (
-              <p className="note" style={{ marginBottom: 0 }}>
-                The language pass did not return usable JSON, so this axis is degraded. The
-                retrieval numbers stand on their own.
-              </p>
-            )}
+      <div className="page">
+        <div className="tiles" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(165px, 1fr))" }}>
+          <div className="tile accent">
+            <div className="k">In the queue</div>
+            <div className="v">{total}</div>
+            <div className="c">{total === 1 ? "submission" : "submissions"} received</div>
           </div>
-
-          <div className="panel">
-            <h2>Retrieval</h2>
-            <div className="metric">
-              <span>Overlap with prior talks</span>
-              <b>{result.scores.overlap}</b>
+          <div className="tile">
+            <div className="k">Reviewed by a human</div>
+            <div className="v">
+              {reviewed}
+              <span style={{ fontSize: 15, color: "var(--ink-3)", fontWeight: 500 }}> / {total}</span>
             </div>
-            <div className="metric">
-              <span>Novelty</span>
-              <b>{result.scores.novelty}</b>
+            <div className="progress" style={{ marginTop: 8 }}>
+              <div style={{ width: `${pct}%` }} />
             </div>
-            <div className="metric">
-              <span>Mean over the top three</span>
-              <b>{result.scores.mean_top3}</b>
-            </div>
-            <div className="metric">
-              <span>Specificity</span>
-              <b>{a.specificity}</b>
-            </div>
-            <div className="metric">
-              <span>Sort score</span>
-              <b>{result.scores.composite}</b>
-            </div>
-            {result.scores.nearest_title && (
-              <p className="note" style={{ margin: "10px 0 0" }}>
-                Overlap is measured against &ldquo;{result.scores.nearest_title}&rdquo;: how much
-                of this abstract&apos;s distinctive vocabulary already appears there. Rare words
-                count for more than common ones.
-              </p>
-            )}
-            <p className="note" style={{ marginBottom: 0 }}>
-              A sort order for a queue, not a verdict. Weights come from config, so a chair
-              can retune them.
-            </p>
           </div>
-
-          <div className="panel">
-            <h2>Specificity, in its own words</h2>
-            <p className="note" style={{ marginTop: 0 }}>
-              {a.specificity_evidence.length
-                ? "Highlighted below, each one checked as a verbatim quote from the abstract."
-                : "Nothing in this abstract was specific enough to quote. That is the finding."}
-              {a.dropped_quotes > 0 &&
-                ` ${a.dropped_quotes} quote${a.dropped_quotes > 1 ? "s were" : " was"} dropped for not matching the text exactly.`}
-            </p>
-            <div className="quote" style={{ whiteSpace: "pre-wrap" }}>
-              <Highlighted
-                text={abstract}
-                quotes={[...a.specificity_evidence, ...a.sales_evidence]}
-              />
+          <div className="tile">
+            <div className="k">Mean Panch Score</div>
+            <div className="v">{scored.length ? mean : "—"}</div>
+            <div className="c">
+              {scored.length
+                ? `over the ${scored.length} analysed so far`
+                : "nothing analysed yet"}
             </div>
-            {a.sales_evidence.length > 0 && (
-              <>
-                <p className="note" style={{ marginBottom: 4 }}>
-                  Reads as vendor copy. Worth a closer look, not a conclusion:
-                </p>
-                {a.sales_evidence.map((q) => (
-                  <div className="quote" key={q}>
-                    &ldquo;{q}&rdquo;
-                  </div>
-                ))}
-              </>
-            )}
           </div>
-
-          <div className="panel">
-            <h2>Similar prior talks</h2>
-            <TalkCards talks={result.neighbours} />
+          <div className="tile">
+            <div className="k">Compared against</div>
+            <div className="v">3,436</div>
+            <div className="c">prior talks, for originality</div>
           </div>
+        </div>
 
-          <div className="panel">
-            <h2>Your decision</h2>
-            <p className="note" style={{ marginTop: 0 }}>
-              Nothing above decided anything. The tool is the clerk, the council decides.
-            </p>
-            <div className="row">
-              {["Approve", "Reject", "Needs discussion"].map((v) => (
-                <button key={v} className="ghost" onClick={() => setDecision(v)}>
-                  {v}
+        <div className="card">
+          <div className="hd" style={{ flexWrap: "wrap" }}>
+            <h2>Submissions</h2>
+            <select
+              value={track}
+              onChange={(e) => setTrack(e.target.value)}
+              style={{ width: "auto", minWidth: 190, padding: "5px 30px 5px 10px", fontSize: 13 }}
+            >
+              {tracks.map((t) => (
+                <option key={t}>{t}</option>
+              ))}
+            </select>
+            <div className="segmented">
+              {(["all", "todo", "done"] as const).map((s) => (
+                <button key={s} className={show === s ? "on" : ""} onClick={() => setShow(s)}>
+                  {s === "all" ? "All" : s === "todo" ? "To review" : "Reviewed"}
                 </button>
               ))}
             </div>
-            {decision && (
-              <p className="note" style={{ marginBottom: 0 }}>
-                Recorded: <b>{decision}</b>, by a human, with the speaker{" "}
-                {anonymous ? "hidden" : "visible"}.
-              </p>
-            )}
+            <span className="tiny" style={{ marginLeft: "auto" }}>
+              {filtered.length} shown
+            </span>
           </div>
+
+          {error && <div className="bd"><div className="banner err">{error}</div></div>}
+
+          {rows === null && !error && (
+            <div className="empty">
+              <p>Loading the queue…</p>
+            </div>
+          )}
+
+          {rows !== null && !filtered.length && (
+            <div className="empty">
+              <h3>Nothing here yet</h3>
+              <p>
+                {total
+                  ? "No submission matches this filter."
+                  : "Submit a talk and it lands in this queue with its analysis attached."}
+              </p>
+              <Link href="/submit">
+                <button>Submit a talk</button>
+              </Link>
+            </div>
+          )}
+
+          {filtered.length > 0 && (
+            <div style={{ overflowX: "auto" }}>
+              <table className="queue">
+                <thead>
+                  <tr>
+                    <th>Talk</th>
+                    <th>Track</th>
+                    <th>Format</th>
+                    <th className="num">Panch Score</th>
+                    <th>Status</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((r) => (
+                    <tr key={r.id}>
+                      <td>
+                        <div className="ttl">{r.title}</div>
+                        <div className="by">
+                          {anonymous
+                            ? `submission ${r.id}`
+                            : `${r.speaker.name || "unnamed"}${r.speaker.employer ? `, ${r.speaker.employer}` : ""}`}
+                        </div>
+                      </td>
+                      <td>
+                        <span className="tag">{r.track}</span>
+                      </td>
+                      <td className="muted">{r.format || "—"}</td>
+                      <td className="num">
+                        {r.panch_score === null ? (
+                          <span className="tiny">runs when opened</span>
+                        ) : (
+                          <span className={`score${band(r.panch_score)}`}>{r.panch_score}</span>
+                        )}
+                      </td>
+                      <td>
+                        {r.reviewed ? (
+                          <span className={`tag ${r.verdict}`}>
+                            {r.verdict === "needs_discussion" ? "needs discussion" : r.verdict}
+                          </span>
+                        ) : (
+                          <span className="tiny">awaiting a human</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <Link href={`/review/${r.id}`}>
+                          <button className="secondary small">
+                            {r.reviewed ? "Reopen" : "Review"}
+                          </button>
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-      )}
-    </div>
+
+        <p className="tiny" style={{ marginTop: 14 }}>
+          Analysis runs the first time someone opens a talk, not on submission, so nothing is
+          spent on abstracts nobody reads. The Panch Score sorts this list and does nothing else. No submission is approved or
+          rejected without a person pressing a button on its page.
+        </p>
+      </div>
+    </>
   );
 }
