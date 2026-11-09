@@ -1,0 +1,18 @@
+# Model names exactly as the endpoint serves them.
+aliases:
+  reasoning: ""
+  fast: ""
+
+models:
+  mentor:  { alias: fast,      temperature: 0.4, stream: true, max_tool_calls_per_turn: 4 }
+  analyse: { alias: reasoning, temperature: 0.1 }
+
+retrieval:
+  k: 10
+  rrf_rank_constant: 60
+
+weights:
+  novelty: 0.35
+  overlap: 0.25
+  specificity: 0.25
+  track_fit: 0.15
