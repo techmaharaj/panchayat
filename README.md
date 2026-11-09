@@ -99,6 +99,27 @@ in the header. Nothing else changes.
 Environment: `LLM_BASE_URL`, `LLM_API_KEY`, `ELASTIC_CLOUD_ID`,
 `ELASTIC_API_KEY`. All server-side. None of them reach the browser.
 
+## How we know retrieval works
+
+`scripts/eval-retrieval.ts`, no human labelling and no invented ground truth.
+
+81 titles in the corpus ran in more than one edition. Query with one twin's
+abstract, exclude that talk, and check whether a sibling comes back in the
+top 5. Over 224 such probes:
+
+| Backend | recall@5 |
+|---|---|
+| Elastic hybrid, BM25 + ELSER fused with RRF | **95.1%** (213/224) |
+| In-memory BM25 fallback | **96.0%** (215/224) |
+
+The fallback matching the cluster is the useful result, not an embarrassing
+one: it is what lets the demo survive losing Elastic mid-sentence, and it is
+why the in-memory path is a real implementation rather than a stub.
+
+```bash
+node --experimental-strip-types --env-file=.env.local scripts/eval-retrieval.ts
+```
+
 ## The corpus
 
 `data/corpus.jsonl`, 3,436 talks scraped from the public Sched schedules for
