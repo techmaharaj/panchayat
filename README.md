@@ -137,7 +137,43 @@ the reviewer still returns neighbours and verbatim evidence, and both pages
 show `retrieval: in-memory BM25`.
 
 Environment: `LLM_BASE_URL`, `LLM_API_KEY`, `ELASTIC_CLOUD_ID`,
-`ELASTIC_API_KEY`. All server-side. None of them reach the browser.
+`ELASTIC_API_KEY`.
+
+## Deploying it, and where the keys live
+
+All four values are read only inside server code, in `lib/llm/client.ts` and
+`lib/es/client.ts`. No value is ever prefixed `NEXT_PUBLIC_`, no client
+component reads `process.env`, and every call to Elasticsearch and to the
+model endpoint happens in a route handler on the server. Someone using the
+deployed app can open devtools and find nothing: they see their own requests
+to `/api/...` and the answers, never a credential and never the cluster
+address.
+
+So the keys go in the host's environment settings, not in the repository.
+`.env.local` is gitignored and has never been committed, which the git
+history will confirm.
+
+```bash
+npm i -g vercel
+vercel --prod
+# then set the four values once, as encrypted environment variables:
+vercel env add LLM_BASE_URL production
+vercel env add LLM_API_KEY production
+vercel env add ELASTIC_CLOUD_ID production
+vercel env add ELASTIC_API_KEY production
+vercel --prod   # redeploy so the new values are picked up
+```
+
+**Not Cloudflare Pages.** The API routes run on Node: they read the corpus
+and the prompt files off disk and use `node:crypto`. Pages wants the edge
+runtime, so it would mean rewriting the retrieval fallback and the prompt
+loader for no gain today. Any Node host works: Vercel, Render, Fly, a
+container.
+
+If you want to harden it further before handing out the link, issue the
+deployment a restricted Elasticsearch API key, read on `talks` and read plus
+write on `submissions`, rather than the key used to build the index. Then the
+worst case of a compromised deployment is a reindex, not cluster access.
 
 ## How we know retrieval works
 
