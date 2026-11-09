@@ -17,7 +17,7 @@ const STOP = new Set(
     .split(" "),
 );
 
-function tokens(s: string): string[] {
+export function tokens(s: string): string[] {
   return s
     .toLowerCase()
     .replace(/[^a-z0-9+#.\- ]/g, " ")
@@ -42,6 +42,15 @@ interface Corpus {
 }
 
 let corpus: Corpus | null = null;
+
+/** Document frequency across the corpus, for callers weighting rare terms. */
+export function documentFrequency(term: string): number {
+  return load().df.get(term) ?? 0;
+}
+
+export function corpusSize(): number {
+  return load().docs.length;
+}
 
 function load(): Corpus {
   if (corpus) return corpus;
