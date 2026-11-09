@@ -19,10 +19,46 @@ It will not write their abstract. Asked directly, told the deadline is in an
 hour, it declines, says why, and asks a question instead. That refusal is the
 product, not a limitation of it.
 
-**A reviewer view.** Paste an abstract and get the prior talks nearest to it,
-an overlap number you can check by reading, a paragraph on how it differs from
-those talks, and the phrases that carry its specificity quoted back verbatim.
-Then you decide.
+**A submission form with the mentor beside it.** The speaker fills in a form
+shaped like the real thing (title, track, format, abstract, bio) with the
+mentor docked alongside, able to see their draft and still refusing to write
+it. Submitting stores the talk in Elasticsearch.
+
+**A review queue for the committee.** Every submission, filterable by track
+and by whether a human has looked at it, each with a Panch Score and a button
+that opens it. Opening one shows the abstract with its evidence highlighted,
+the prior talks nearest to it, a spider chart over five axes, and controls to
+overrule every one of them.
+
+### The Panch Score
+
+Panch is five: five axes, five elders of the council.
+
+| Axis | Weight | Where it comes from |
+|---|---|---|
+| Content | 30% | is there anything here only someone who did the work would know |
+| Originality | 25% | term containment against the nearest of 3,436 prior talks |
+| Relevance | 20% | fit against the track the speaker chose |
+| Speaker | 15% | does the submission show they did the thing |
+| Not a Product Pitch | 10% | is this an engineering talk or a vendor one |
+
+Four of the five come from the programme committee rubric a real CNCF
+evaluator sees. Originality is the one this tool adds, and it is the one the
+corpus makes possible.
+
+The weights live in `config/models.yaml`, so a chair retunes them without a
+deploy. The score sorts a queue and does nothing else. A reviewer can move
+any axis on its stars, watch the score and the chart follow, and record a
+verdict with a comment. The chart then draws both polygons, dashed for the
+analysis and solid for the human, so a disagreement is visible rather than
+silently overwritten.
+
+### Analysis is lazy
+
+Nothing is analysed when a talk is submitted. The first time a reviewer opens
+one, it is searched against the corpus, read once, and the result is written
+back. A committee of humans does not read 200 analyses, so a tool should not
+pay for 200, and the speaker is never left watching a spinner on submit.
 
 ## What it will not do
 
