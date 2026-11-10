@@ -1,7 +1,9 @@
-# Model names exactly as the endpoint serves them.
+# Model names exactly as the endpoint serves them. Nothing else in the
+# codebase knows what is behind LLM_BASE_URL, so moving between endpoints
+# is these two lines plus the environment.
 aliases:
-  reasoning: "qwen3.8-27b"
-  fast: "qwen3.8-27b-nothink"
+  reasoning: "gemini-flash-latest"
+  fast: "gemini-flash-latest"
 
 models:
   mentor:  { alias: fast,      temperature: 0.4, stream: true, max_tool_calls_per_turn: 4 }
